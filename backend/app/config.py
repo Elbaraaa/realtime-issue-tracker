@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     env: str = "development"
     database_url: str = "postgresql+psycopg://tracker:tracker@localhost:5432/tracker"
-    jwt_secret: str = "dev-only-change-me"
+    jwt_secret: str = "dev-only-insecure-secret-change-me-in-production"
     jwt_ttl_minutes: int = 60
     bcrypt_rounds: int = 12
     cors_origins: list[str] = ["http://localhost:5173"]

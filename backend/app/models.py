@@ -13,25 +13,30 @@ def utcnow() -> datetime:
 
 
 def _enum(cls: type[enum.Enum]) -> Enum:
-    return Enum(cls, native_enum=False, create_constraint=True, length=20,
-                values_callable=lambda e: [m.value for m in e])
+    return Enum(
+        cls,
+        native_enum=False,
+        create_constraint=True,
+        length=20,
+        values_callable=lambda e: [m.value for m in e],
+    )
 
 
-class Status(str, enum.Enum):
+class Status(enum.StrEnum):
     todo = "todo"
     in_progress = "in_progress"
     in_review = "in_review"
     done = "done"
 
 
-class Priority(str, enum.Enum):
+class Priority(enum.StrEnum):
     low = "low"
     medium = "medium"
     high = "high"
     urgent = "urgent"
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     owner = "owner"
     member = "member"
 
