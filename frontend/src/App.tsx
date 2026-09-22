@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { ApiError } from "./lib/api";
 import { AuthProvider, useAuth } from "./lib/auth";
+import BoardPage from "./pages/BoardPage";
 import LoginPage from "./pages/LoginPage";
 import ProjectsPage from "./pages/ProjectsPage";
 
@@ -53,6 +54,16 @@ export default function App() {
                 <RequireAuth>
                   <Shell>
                     <ProjectsPage />
+                  </Shell>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/projects/:projectId"
+              element={
+                <RequireAuth>
+                  <Shell>
+                    <BoardPage />
                   </Shell>
                 </RequireAuth>
               }
