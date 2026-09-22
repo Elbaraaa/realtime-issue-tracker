@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .routers import auth
 
 
 def create_app() -> FastAPI:
@@ -15,6 +16,8 @@ def create_app() -> FastAPI:
     )
 
     api = APIRouter(prefix="/api")
+    for module in (auth,):
+        api.include_router(module.router)
     app.include_router(api)
 
     @app.get("/healthz", include_in_schema=False)
