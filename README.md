@@ -73,6 +73,13 @@ of proxy and access logs. Bad tokens close with `4401`, non-members with `4403`.
 Clients reconnect with capped exponential backoff and refetch on every
 reconnect, so nothing is lost while offline.
 
+**Slowing down password guessing.** Failed sign-ins are counted in a sliding
+15-minute window per account (5) and per client IP (20). Past either limit the
+API answers `429` with `Retry-After`, before checking the password, so a
+locked-out guesser can't confirm a correct one. A successful sign-in clears the
+account's count. nginx passes the real client IP, and the API trusts it
+because it is only reachable through nginx.
+
 **Not leaking what exists.** Non-members get `404`, not `403`, for projects and
 issues, so IDs can't be probed. Login checks a dummy bcrypt hash for unknown
 emails, so response time doesn't reveal which accounts exist.
@@ -82,7 +89,8 @@ emails, so response time doesn't reveal which accounts exist.
 - The WebSocket hub is in-process, so it supports one API replica. Scaling out
   means putting Postgres `LISTEN/NOTIFY` or Redis pub/sub behind the same
   `publish`/`subscribe` interface in `backend/app/events.py`.
-- There is no login rate limiting or refresh-token rotation yet.
+- Sign-in rate limits live in memory for the same reason, and there is no
+  refresh-token rotation yet.
 
 ## Testing
 
