@@ -192,6 +192,10 @@ export default function IssuePanel({ issueId, projectKey, members, onClose }: Pr
   );
 }
 
+function label(value: unknown): string {
+  return STATUSES.find((s) => s.value === value)?.label ?? String(value);
+}
+
 function describe(a: Activity): string {
   if (a.kind === "issue_created") return "created this issue";
   if (a.kind === "comment_added") return "commented";
@@ -202,7 +206,7 @@ function describe(a: Activity): string {
       .map(([field, c]) => {
         if (field === "description") return "edited the description";
         if (field === "assignee_id") return c.to === null ? "unassigned it" : "changed the assignee";
-        return `changed ${field} from ${String(c.from)} to ${String(c.to)}`;
+        return `changed ${field} from ${label(c.from)} to ${label(c.to)}`;
       });
     return parts.length ? parts.join(", ") : "reordered it";
   }
