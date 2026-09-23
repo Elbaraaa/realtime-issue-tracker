@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByStatus, matchesQuery, POSITION_GAP, positionAt } from "./board";
+import { groupByStatus, keyboardMove, matchesQuery, POSITION_GAP, positionAt } from "./board";
 import type { Issue } from "./types";
 
 const user = { id: 1, email: "a@example.com", name: "Ada" };
@@ -60,5 +60,41 @@ describe("matchesQuery", () => {
     expect(matchesQuery(i, "WEB", "web-12")).toBe(true);
     expect(matchesQuery(i, "WEB", "web-1")).toBe(false);
     expect(matchesQuery(i, "WEB", "grace")).toBe(true);
+  });
+});
+
+describe("keyboardMove", () => {
+  const todo = [issue(1, 1000), issue(2, 2000), issue(3, 3000)];
+  const inProgress = [issue(4, 1000, { status: "in_progress" })];
+  const columns = groupByStatus([...todo, ...inProgress]);
+
+  it("moves right to the end of the next column", () => {
+    expect(keyboardMove(columns, todo[0], "ArrowRight")).toEqual({
+      status: "in_progress",
+      position: 1000 + POSITION_GAP,
+    });
+  });
+
+  it("stops at the first and last columns", () => {
+    expect(keyboardMove(columns, todo[0], "ArrowLeft")).toBeNull();
+    const done = issue(5, 1000, { status: "done" });
+    expect(keyboardMove(groupByStatus([done]), done, "ArrowRight")).toBeNull();
+  });
+
+  it("moves up and down one slot", () => {
+    // Card 2 up: lands before card 1.
+    expect(keyboardMove(columns, todo[1], "ArrowUp")).toEqual({ status: "todo", position: 500 });
+    // Card 2 down: lands between cards 3 and the end.
+    expect(keyboardMove(columns, todo[1], "ArrowDown")).toEqual({
+      status: "todo",
+      position: 3000 + POSITION_GAP,
+    });
+    // Card 1 down: lands between cards 2 and 3.
+    expect(keyboardMove(columns, todo[0], "ArrowDown")).toEqual({ status: "todo", position: 2500 });
+  });
+
+  it("stops at the top and bottom of a column", () => {
+    expect(keyboardMove(columns, todo[0], "ArrowUp")).toBeNull();
+    expect(keyboardMove(columns, todo[2], "ArrowDown")).toBeNull();
   });
 });
