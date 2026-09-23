@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.db import Base, get_session_factory  # noqa: E402
 from app.main import app  # noqa: E402
+from app.routers.auth import email_limiter, ip_limiter  # noqa: E402
 
 
 def _make_engine():
@@ -28,6 +29,8 @@ def client():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     app.dependency_overrides[get_session_factory] = lambda: factory
+    email_limiter.clear()
+    ip_limiter.clear()
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

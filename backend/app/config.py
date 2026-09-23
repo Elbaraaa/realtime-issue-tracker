@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     jwt_ttl_minutes: int = 60
     bcrypt_rounds: int = 12
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Failed sign-ins allowed per window, per account and per client IP.
+    login_max_failures_per_email: int = 5
+    login_max_failures_per_ip: int = 20
+    login_window_seconds: int = 900
 
     @model_validator(mode="after")
     def _require_real_secret_in_production(self) -> "Settings":
