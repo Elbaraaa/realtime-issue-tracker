@@ -15,7 +15,7 @@ TanStack Query · WebSockets · Docker · GitHub Actions
 - Accounts with JWT authentication
 - Projects with owners and members, invited by email
 - Issues with per-project keys (`WEB-12`), status, priority, assignee
-- Drag-and-drop kanban board, within and between columns
+- Kanban board: drag and drop, or move cards from the keyboard (Alt + arrow keys)
 - Comments and a full change history on every issue
 - Live updates over WebSockets, with automatic reconnect and resync
 

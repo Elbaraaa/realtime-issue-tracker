@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import type { DragEvent, FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { DragEvent, FormEvent, KeyboardEvent } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { groupByStatus, matchesQuery, positionAt } from "../lib/board";
+import { groupByStatus, keyboardMove, matchesQuery, positionAt } from "../lib/board";
+import type { MoveKey } from "../lib/board";
 import { PRIORITIES, STATUSES } from "../lib/types";
 import { useProjectEvents } from "../lib/useProjectEvents";
 import type { Issue, IssuePage, Member, Priority, Project, Status } from "../lib/types";
@@ -31,6 +32,9 @@ export default function BoardPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const [refocusId, setRefocusId] = useState<number | null>(null);
+
 
   const live = useProjectEvents(projectId, {
     onReady: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
@@ -48,44 +52,105 @@ export default function BoardPage() {
     return groupByStatus((issues.data?.items ?? []).filter((i) => matchesQuery(i, key, query)));
   }, [issues.data, project.data, query]);
 
+  // A card moved to another column remounts there, so keep keyboard focus on it until the
+  // user deliberately focuses something else (see the card's onBlur).
+  useEffect(() => {
+    if (refocusId === null) return;
+    const card = document.querySelector<HTMLElement>(`[data-issue-id="${refocusId}"]`);
+    if (card && document.activeElement !== card) card.focus();
+  }, [columns, refocusId]);
+
+  type Move = { issue: Issue; status: Status; position: number; previous?: IssuePage };
+
   const move = useMutation({
-    mutationFn: ({ issue, status, position }: { issue: Issue; status: Status; position: number }) =>
+    mutationKey: ["move-issue"],
+    mutationFn: ({ issue, status, position }: Move) =>
       api<Issue>(`/issues/${issue.id}`, {
         method: "PATCH",
         json: { version: issue.version, status, position },
       }),
-    onMutate: async ({ issue, status, position }) => {
-      // Move the card immediately; roll back if the server disagrees.
-      await qc.cancelQueries({ queryKey: issuesKey });
-      const previous = qc.getQueryData<IssuePage>(issuesKey);
+    onSuccess: (updated) => {
       qc.setQueryData<IssuePage>(issuesKey, (page) =>
-        page && {
-          ...page,
-          items: page.items.map((i) => (i.id === issue.id ? { ...i, status, position } : i)),
-        },
+        page && { ...page, items: page.items.map((i) => (i.id === updated.id ? updated : i)) },
       );
-      return { previous };
     },
-    onError: (err, _vars, ctx) => {
-      if (ctx?.previous) qc.setQueryData(issuesKey, ctx.previous);
+    onError: (err, { previous }) => {
+      if (previous) qc.setQueryData(issuesKey, previous);
       setNotice(
         err instanceof ApiError && err.status === 409
           ? "Someone else just changed that issue — the board has been refreshed."
           : err.message,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: issuesKey }),
+    // Refetch only after the last queued move, so a mid-sequence refetch can't hand back
+    // a version that an in-flight move is about to bump.
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: ["move-issue"] }) <= 1) {
+        qc.invalidateQueries({ queryKey: issuesKey });
+      }
+    },
   });
+
+  /** The board as it is right now in the cache, including moves not yet re-rendered. */
+  function currentBoard() {
+    const page = qc.getQueryData<IssuePage>(issuesKey);
+    const key = project.data?.key ?? "";
+    const items = page?.items ?? [];
+    return { items, columns: groupByStatus(items.filter((i) => matchesQuery(i, key, query))) };
+  }
+
+  /**
+   * Moves the card in the cache synchronously, then saves it. Doing the optimistic update
+   * here rather than in onMutate (which runs a tick later) means a second keypress or drop
+   * sees the first move, and sends the version the server will have after it.
+   */
+  function startMove(issue: Issue, status: Status, position: number) {
+    const previous = qc.getQueryData<IssuePage>(issuesKey);
+    void qc.cancelQueries({ queryKey: issuesKey }, { revert: false });
+    qc.setQueryData<IssuePage>(issuesKey, (page) =>
+      page && {
+        ...page,
+        items: page.items.map((i) =>
+          i.id === issue.id ? { ...i, status, position, version: i.version + 1 } : i,
+        ),
+      },
+    );
+    move.mutate({ issue, status, position, previous });
+  }
 
   function onDrop(e: DragEvent, status: Status, index: number) {
     e.preventDefault();
     e.stopPropagation();
-    const issue = issues.data?.items.find((i) => i.id === dragging);
+    const board = currentBoard();
+    const issue = board.items.find((i) => i.id === dragging);
     setDragging(null);
     if (!issue) return;
-    const position = positionAt(columns[status], index, issue.id);
+    const position = positionAt(board.columns[status], index, issue.id);
     if (issue.status === status && issue.position === position) return;
-    move.mutate({ issue, status, position });
+    startMove(issue, status, position);
+  }
+
+  function onCardKeyDown(e: KeyboardEvent, issue: Issue) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpenId(issue.id);
+      return;
+    }
+    const moveKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+    if (!e.altKey || !moveKeys.includes(e.key)) return;
+    e.preventDefault();
+    const board = currentBoard();
+    const current = board.items.find((i) => i.id === issue.id) ?? issue;
+    const target = keyboardMove(board.columns, current, e.key as MoveKey);
+    if (!target) return;
+    startMove(current, target.status, target.position);
+    setRefocusId(issue.id);
+    const column = STATUSES.find((s) => s.value === target.status)!.label;
+    setAnnouncement(
+      target.status === current.status
+        ? `Moved ${e.key === "ArrowUp" ? "up" : "down"} in ${column}`
+        : `Moved to ${column}`,
+    );
   }
 
   if (project.error) return <p className="error page">{project.error.message}</p>;
@@ -120,6 +185,14 @@ export default function BoardPage() {
         </p>
       )}
 
+      <p id="board-help" className="visually-hidden">
+        Press Enter to open an issue. Hold Alt and use the arrow keys to move it between and
+        within columns.
+      </p>
+      <p className="visually-hidden" aria-live="polite">
+        {announcement}
+      </p>
+
       <NewIssueForm projectId={projectId} members={members.data ?? []} />
 
       <div className="board">
@@ -137,6 +210,13 @@ export default function BoardPage() {
               <article
                 key={issue.id}
                 className={`card issue-card${dragging === issue.id ? " dragging" : ""}`}
+                data-issue-id={issue.id}
+                tabIndex={0}
+                role="button"
+                aria-label={`${project.data.key}-${issue.number}: ${issue.title}, ${issue.priority} priority`}
+                aria-describedby="board-help"
+                onKeyDown={(e) => onCardKeyDown(e, issue)}
+                onBlur={(e) => e.relatedTarget && setRefocusId(null)}
                 draggable
                 onDragStart={() => setDragging(issue.id)}
                 onDragEnd={() => setDragging(null)}
