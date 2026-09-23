@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { groupByStatus, matchesQuery, positionAt } from "../lib/board";
 import { PRIORITIES, STATUSES } from "../lib/types";
+import { useProjectEvents } from "../lib/useProjectEvents";
 import type { Issue, IssuePage, Member, Priority, Project, Status } from "../lib/types";
 import IssuePanel from "./IssuePanel";
 
@@ -30,6 +31,17 @@ export default function BoardPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const live = useProjectEvents(projectId, {
+    onReady: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
+    onEvent: (event) => {
+      qc.invalidateQueries({ queryKey: issuesKey });
+      if (event.kind.startsWith("member_")) {
+        qc.invalidateQueries({ queryKey: ["project", projectId, "members"] });
+      }
+      if (event.issue_id !== null) qc.invalidateQueries({ queryKey: ["issue", event.issue_id] });
+    },
+  });
 
   const columns = useMemo(() => {
     const key = project.data?.key ?? "";
@@ -86,7 +98,10 @@ export default function BoardPage() {
           <h1>
             <span className="key">{project.data.key}</span> {project.data.name}
           </h1>
-          <p className="muted">{issues.data?.total ?? 0} issues</p>
+          <p className="muted">
+            {issues.data?.total ?? 0} issues ·{" "}
+            <span className={live ? "live on" : "live"}>{live ? "Live" : "Reconnecting…"}</span>
+          </p>
         </div>
         <input
           className="search"
