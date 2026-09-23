@@ -433,3 +433,17 @@ label {
 form > textarea + button {
   margin-top: 0.5rem;
 }
+
+.live::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  background: var(--muted);
+}
+
+.live.on::before {
+  background: #2f9e44;
+}
